@@ -1,10 +1,16 @@
+#include "glm/integer.hpp"
+#include "glm/matrix.hpp"
 #include<iostream>
+
+#include<glm/glm.hpp>
+#include<glm/gtc/matrix_transform.hpp>
 
 #include<SDL3/SDL.h>
 #include<geGL/geGL.h>
 #include<geGL/StaticCalls.h>
 
 #include<bunny.hpp>
+
 
 using namespace ge::gl;
 
@@ -46,10 +52,13 @@ int main(int argc,char*argv[]){
 
   uniform float iTime;
   uniform mat4 modelMatrix = mat4(1);
+  uniform mat4 viewMatrix  = mat4(1);
+  uniform mat4 projMatrix  = mat4(1);
 
   void main(){
+    mat4 mvp = projMatrix * viewMatrix * modelMatrix;
 
-    gl_Position = modelMatrix * vec4(position,1);
+    gl_Position = mvp * vec4(position,1);
     vNormal = normal;
   }
   ).";
@@ -70,6 +79,8 @@ int main(int argc,char*argv[]){
 
   GLuint iTimeLoc       = glGetUniformLocation(prg,"iTime"      );
   GLuint modelMatrixLoc = glGetUniformLocation(prg,"modelMatrix");
+  GLuint viewMatrixLoc  = glGetUniformLocation(prg,"viewMatrix" );
+  GLuint projMatrixLoc  = glGetUniformLocation(prg,"projMatrix" );
 
   GLuint vbo;
   glCreateBuffers(1,&vbo);
@@ -99,23 +110,52 @@ int main(int argc,char*argv[]){
 
   float iTime = 0.f;
 
-  float modelMatrix[16] = {
-    1,0,0,0,
-    0,1,0,0,
-    0,0,1,0,
-    0.3,0.2,0,1,
-  };
+  glm::vec3 cameraPosition = glm::vec3(0.f);
+  glm::vec3 cameraAngle    = glm::vec3(0.f);
+
+  float sensitivity = 0.01f;
 
   bool running = true;
   while(running){//main loop
     SDL_Event event;
+
+    auto viewRotationMatrix = 
+      glm::rotate(glm::mat4(1.f),cameraAngle.x,glm::vec3(1.f,0.f,0.f))*
+      glm::rotate(glm::mat4(1.f),cameraAngle.y,glm::vec3(0.f,1.f,0.f));
+
     while(SDL_PollEvent(&event)){//event loop
       if(event.type == SDL_EVENT_QUIT)running = false;
+      if(event.type == SDL_EVENT_KEY_DOWN){
+        auto vrtm = glm::transpose(viewRotationMatrix);
+
+        glm::vec3 X = glm::vec3(vrtm[0]);
+        glm::vec3 Y = glm::vec3(vrtm[1]);
+        glm::vec3 Z = glm::vec3(vrtm[2]);
+        if(event.key.key == SDLK_W      ) cameraPosition += Z*0.1f;
+        if(event.key.key == SDLK_S      ) cameraPosition -= Z*0.1f;
+        if(event.key.key == SDLK_A      ) cameraPosition += X*0.1f;
+        if(event.key.key == SDLK_D      ) cameraPosition -= X*0.1f;
+        if(event.key.key == SDLK_SPACE  ) cameraPosition -= Y*0.1f;
+        if(event.key.key == SDLK_LSHIFT ) cameraPosition += Y*0.1f;
+      }
+      if(event.type == SDL_EVENT_MOUSE_MOTION){
+        if(event.motion.state&SDL_BUTTON_LEFT){
+          cameraAngle.y += event.motion.xrel * sensitivity;
+          cameraAngle.x += event.motion.yrel * sensitivity;
+        }
+      }
 
     }
 
     iTime += 0.01;
   
+    auto modelMatrix = glm::rotate(glm::mat4(1.f),glm::half_pi<float>()*iTime,glm::vec3(0.f,1.f,0.f));
+
+
+    auto viewLocationMatrix = glm::translate(glm::mat4(1.f),cameraPosition);
+
+    auto viewMatrix = viewRotationMatrix*viewLocationMatrix;
+    auto projMatrix = glm::perspective(glm::half_pi<float>(),1.f,0.1f,1000.f);
 
 
     glPointSize(10);
@@ -128,7 +168,9 @@ int main(int argc,char*argv[]){
     glUseProgram(prg);
 
     glProgramUniform1f(prg,iTimeLoc,iTime);
-    glProgramUniformMatrix4fv(prg,modelMatrixLoc,1,GL_FALSE,modelMatrix);
+    glProgramUniformMatrix4fv(prg,modelMatrixLoc,1,GL_FALSE,(float*)&modelMatrix);
+    glProgramUniformMatrix4fv(prg,viewMatrixLoc ,1,GL_FALSE,(float*)&viewMatrix );
+    glProgramUniformMatrix4fv(prg,projMatrixLoc ,1,GL_FALSE,(float*)&projMatrix );
 
     glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(VertexIndex),GL_UNSIGNED_INT,0);
 
