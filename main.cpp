@@ -40,27 +40,26 @@ int main(int argc,char*argv[]){
   #version 460
 
   layout(location=0)in vec3 position;
+  layout(location=1)in vec3 normal  ;
+
+  out vec3 vNormal;
 
   uniform float iTime;
+  uniform mat4 modelMatrix = mat4(1);
 
   void main(){
-    mat4 model = mat4(1);
-    float a = radians(3000*iTime);
-    model[0][0] =  cos(a);
-    model[0][1] =  sin(a);
-    model[1][0] = -sin(a);
-    model[1][1] =  cos(a);
 
-
-    gl_Position = model * vec4(position,1);
+    gl_Position = modelMatrix * vec4(position,1);
+    vNormal = normal;
   }
   ).";
 
   auto fsSrc = R".(
   #version 460
   out vec4 fColor;
+  in vec3 vNormal;
   void main(){
-    fColor = vec4(0,1,0,1);    
+    fColor = vec4(vNormal,1);    
   }
   ).";
 
@@ -69,7 +68,8 @@ int main(int argc,char*argv[]){
 
   auto prg = createProgram({vs,fs});
 
-  GLuint iTimeLoc = glGetUniformLocation(prg,"iTime");
+  GLuint iTimeLoc       = glGetUniformLocation(prg,"iTime"      );
+  GLuint modelMatrixLoc = glGetUniformLocation(prg,"modelMatrix");
 
   GLuint vbo;
   glCreateBuffers(1,&vbo);
@@ -86,10 +86,25 @@ int main(int argc,char*argv[]){
   glEnableVertexArrayAttrib(vao,0);
   glVertexArrayAttribFormat(vao,0,3,GL_FLOAT,GL_FALSE,0);
   glVertexArrayAttribBinding(vao,0,0);
+
+  glVertexArrayVertexBuffer(vao,1,vbo,sizeof(float)*3,sizeof(float)*6);
+  glEnableVertexArrayAttrib(vao,1);
+  glVertexArrayAttribFormat(vao,1,3,GL_FLOAT,GL_FALSE,0);
+  glVertexArrayAttribBinding(vao,1,1);
+
   glVertexArrayElementBuffer(vao,ebo);
 
 
+  glEnable(GL_DEPTH_TEST);
+
   float iTime = 0.f;
+
+  float modelMatrix[16] = {
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    0.3,0.2,0,1,
+  };
 
   bool running = true;
   while(running){//main loop
@@ -106,13 +121,14 @@ int main(int argc,char*argv[]){
     glPointSize(10);
 
     glClearColor(1,0,0,1);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
 
     glBindVertexArray(vao);
     glUseProgram(prg);
 
     glProgramUniform1f(prg,iTimeLoc,iTime);
+    glProgramUniformMatrix4fv(prg,modelMatrixLoc,1,GL_FALSE,modelMatrix);
 
     glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(VertexIndex),GL_UNSIGNED_INT,0);
 
