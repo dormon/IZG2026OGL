@@ -4,6 +4,8 @@
 #include<geGL/geGL.h>
 #include<geGL/StaticCalls.h>
 
+#include<bunny.hpp>
+
 using namespace ge::gl;
 
 GLuint createShader(GLenum type,std::string const&src){
@@ -36,8 +38,11 @@ int main(int argc,char*argv[]){
 
   auto vsSrc = R".(
   #version 460
+
+  layout(location=0)in vec3 position;
+
   void main(){
-    gl_Position = vec4(gl_VertexID%2,gl_VertexID/2,0,1);
+    gl_Position = vec4(position,1);
   }
   ).";
 
@@ -53,6 +58,26 @@ int main(int argc,char*argv[]){
   auto fs = createShader(GL_FRAGMENT_SHADER,fsSrc);
 
   auto prg = createProgram({vs,fs});
+
+
+  GLuint vbo;
+  glCreateBuffers(1,&vbo);
+  glNamedBufferData(vbo,sizeof(bunnyVertices),bunnyVertices,GL_DYNAMIC_COPY);
+
+  GLuint ebo;
+  glCreateBuffers(1,&ebo);
+  glNamedBufferData(ebo,sizeof(bunnyIndices),bunnyIndices,GL_DYNAMIC_COPY);
+     
+
+  GLuint vao;
+  glCreateVertexArrays(1,&vao);
+  glVertexArrayVertexBuffer(vao,0,vbo,sizeof(float)*0,sizeof(float)*6);
+  glEnableVertexArrayAttrib(vao,0);
+  glVertexArrayAttribFormat(vao,0,3,GL_FLOAT,GL_FALSE,0);
+  glVertexArrayAttribBinding(vao,0,0);
+  glVertexArrayElementBuffer(vao,ebo);
+
+
 
   bool running = true;
   while(running){//main loop
@@ -70,8 +95,10 @@ int main(int argc,char*argv[]){
     glClear(GL_COLOR_BUFFER_BIT);
 
 
+    glBindVertexArray(vao);
     glUseProgram(prg);
-    glDrawArrays(GL_TRIANGLES,0,3);
+
+    glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(VertexIndex),GL_UNSIGNED_INT,0);
 
     SDL_GL_SwapWindow(window);
   }
