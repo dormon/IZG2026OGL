@@ -1,6 +1,5 @@
-#include "glm/integer.hpp"
-#include "glm/matrix.hpp"
 #include<iostream>
+#include<map>
 
 #include<glm/glm.hpp>
 #include<glm/gtc/matrix_transform.hpp>
@@ -21,6 +20,14 @@ GLuint createShader(GLenum type,std::string const&src){
   };
   glShaderSource(s,1,sss,0);
   glCompileShader(s);
+  GLint status;
+  glGetShaderiv(s,GL_COMPILE_STATUS,&status);
+  if(status == GL_FALSE){
+    char buf[2024];
+    glGetShaderInfoLog(s,2024,0,buf);
+    std::cerr << buf << std::endl;
+  }
+
   return s;
 }
 
@@ -44,10 +51,10 @@ int main(int argc,char*argv[]){
 
   auto vsSrc = R".(
   #version 460
-
   layout(location=0)in vec3 position;
   layout(location=1)in vec3 normal  ;
 
+  out vec3 vPosition;
   out vec3 vNormal;
 
   uniform float iTime;
@@ -59,16 +66,46 @@ int main(int argc,char*argv[]){
     mat4 mvp = projMatrix * viewMatrix * modelMatrix;
 
     gl_Position = mvp * vec4(position,1);
-    vNormal = normal;
+    vPosition = vec3(modelMatrix * vec4(position,1));
+    vNormal = vec3(inverse(transpose(modelMatrix))*vec4(normal,0));
   }
   ).";
 
   auto fsSrc = R".(
   #version 460
   out vec4 fColor;
+
+  in vec3 vPosition;
   in vec3 vNormal;
+
+  uniform mat4 viewMatrix  = mat4(1);
+
+  uniform vec3 lightPosition     = vec3(0,0,10);
+  uniform vec3 lightColor        = vec3(1);
+  uniform vec3 ambientLightColor = vec3(0.2);
+  uniform vec3 materialColor     = vec3(0.3,1.f,0.4);
+  uniform float shininess = 40.f;
+
   void main(){
-    fColor = vec4(vNormal,1);    
+    vec3 cameraPosition = vec3(inverse(viewMatrix) * vec4(0,0,0,1));
+
+    vec3 N = normalize(vNormal);
+    vec3 L = normalize(lightPosition - vPosition);
+    vec3 V = normalize(cameraPosition - vPosition);
+    vec3 R = -reflect(L,N);
+
+    float dF = max(dot(N,L),0);
+    float sF = pow(max(dot(V,R),0),shininess);
+
+    vec3 ambient  = ambientLightColor * materialColor;
+    vec3 diffuse  = dF * lightColor * materialColor;
+    vec3 specular = sF * lightColor;
+
+
+    vec3 lambert = ambient + diffuse;
+    vec3 phong   = ambient + diffuse + specular;
+
+    fColor = vec4(phong,1);    
   }
   ).";
 
@@ -116,6 +153,9 @@ int main(int argc,char*argv[]){
   float sensitivity = 0.01f;
 
   bool running = true;
+
+  std::map<uint32_t,bool>keys;
+
   while(running){//main loop
     SDL_Event event;
 
@@ -126,17 +166,10 @@ int main(int argc,char*argv[]){
     while(SDL_PollEvent(&event)){//event loop
       if(event.type == SDL_EVENT_QUIT)running = false;
       if(event.type == SDL_EVENT_KEY_DOWN){
-        auto vrtm = glm::transpose(viewRotationMatrix);
-
-        glm::vec3 X = glm::vec3(vrtm[0]);
-        glm::vec3 Y = glm::vec3(vrtm[1]);
-        glm::vec3 Z = glm::vec3(vrtm[2]);
-        if(event.key.key == SDLK_W      ) cameraPosition += Z*0.1f;
-        if(event.key.key == SDLK_S      ) cameraPosition -= Z*0.1f;
-        if(event.key.key == SDLK_A      ) cameraPosition += X*0.1f;
-        if(event.key.key == SDLK_D      ) cameraPosition -= X*0.1f;
-        if(event.key.key == SDLK_SPACE  ) cameraPosition -= Y*0.1f;
-        if(event.key.key == SDLK_LSHIFT ) cameraPosition += Y*0.1f;
+        keys[event.key.key] = true;
+      }
+      if(event.type == SDL_EVENT_KEY_UP){
+        keys[event.key.key] = false;
       }
       if(event.type == SDL_EVENT_MOUSE_MOTION){
         if(event.motion.state&SDL_BUTTON_LEFT){
@@ -146,6 +179,18 @@ int main(int argc,char*argv[]){
       }
 
     }
+    auto vrtm = glm::transpose(viewRotationMatrix);
+
+    glm::vec3 X = glm::vec3(vrtm[0]);
+    glm::vec3 Y = glm::vec3(vrtm[1]);
+    glm::vec3 Z = glm::vec3(vrtm[2]);
+    if(keys[SDLK_W      ]) cameraPosition += Z*0.1f;
+    if(keys[SDLK_S      ]) cameraPosition -= Z*0.1f;
+    if(keys[SDLK_A      ]) cameraPosition += X*0.1f;
+    if(keys[SDLK_D      ]) cameraPosition -= X*0.1f;
+    if(keys[SDLK_SPACE  ]) cameraPosition -= Y*0.1f;
+    if(keys[SDLK_LSHIFT ]) cameraPosition += Y*0.1f;
+    if(keys[SDLK_R      ]){cameraPosition*=0.f;cameraAngle*=0.f;}
 
     iTime += 0.01;
   
@@ -160,7 +205,7 @@ int main(int argc,char*argv[]){
 
     glPointSize(10);
 
-    glClearColor(1,0,0,1);
+    glClearColor(0,0,0,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
 
