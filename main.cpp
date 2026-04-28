@@ -56,6 +56,7 @@ int main(int argc,char*argv[]){
 
   out vec3 vPosition;
   out vec3 vNormal;
+  out vec3 vPositionModelSpace;
 
   uniform float iTime;
   uniform mat4 modelMatrix = mat4(1);
@@ -68,6 +69,7 @@ int main(int argc,char*argv[]){
     gl_Position = mvp * vec4(position,1);
     vPosition = vec3(modelMatrix * vec4(position,1));
     vNormal = vec3(inverse(transpose(modelMatrix))*vec4(normal,0));
+    vPositionModelSpace = position;
   }
   ).";
 
@@ -77,19 +79,37 @@ int main(int argc,char*argv[]){
 
   in vec3 vPosition;
   in vec3 vNormal;
+  in vec3 vPositionModelSpace;
 
   uniform mat4 viewMatrix  = mat4(1);
 
   uniform vec3 lightPosition     = vec3(0,0,10);
   uniform vec3 lightColor        = vec3(1);
   uniform vec3 ambientLightColor = vec3(0.2);
-  uniform vec3 materialColor     = vec3(0.3,1.f,0.4);
   uniform float shininess = 40.f;
 
+  vec3 checkerBoard(vec2 uv){
+    return vec3(fract(uv.x*4)<0.5 == fract(uv.y*4)<0.5,0,0);
+  }
+
+  vec3 circle(vec2 uv){
+    if(length(uv)<0.5)
+      return vec3(1,0,0);
+    else
+      return vec3(0,1,0);
+  }
+
   void main(){
+    vec3 N = normalize(vNormal);
+
     vec3 cameraPosition = vec3(inverse(viewMatrix) * vec4(0,0,0,1));
 
-    vec3 N = normalize(vNormal);
+    vec3 materialColor = 
+       checkerBoard(vPositionModelSpace.xz) * dot(N,vec3(0,1,0))+
+       circle      (vPositionModelSpace.xy) * dot(N,vec3(0,0,1));
+
+
+
     vec3 L = normalize(lightPosition - vPosition);
     vec3 V = normalize(cameraPosition - vPosition);
     vec3 R = -reflect(L,N);
