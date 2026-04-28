@@ -41,8 +41,18 @@ int main(int argc,char*argv[]){
 
   layout(location=0)in vec3 position;
 
+  uniform float iTime;
+
   void main(){
-    gl_Position = vec4(position,1);
+    mat4 model = mat4(1);
+    float a = radians(3000*iTime);
+    model[0][0] =  cos(a);
+    model[0][1] =  sin(a);
+    model[1][0] = -sin(a);
+    model[1][1] =  cos(a);
+
+
+    gl_Position = model * vec4(position,1);
   }
   ).";
 
@@ -59,6 +69,7 @@ int main(int argc,char*argv[]){
 
   auto prg = createProgram({vs,fs});
 
+  GLuint iTimeLoc = glGetUniformLocation(prg,"iTime");
 
   GLuint vbo;
   glCreateBuffers(1,&vbo);
@@ -78,6 +89,7 @@ int main(int argc,char*argv[]){
   glVertexArrayElementBuffer(vao,ebo);
 
 
+  float iTime = 0.f;
 
   bool running = true;
   while(running){//main loop
@@ -86,6 +98,8 @@ int main(int argc,char*argv[]){
       if(event.type == SDL_EVENT_QUIT)running = false;
 
     }
+
+    iTime += 0.01;
   
 
 
@@ -97,6 +111,8 @@ int main(int argc,char*argv[]){
 
     glBindVertexArray(vao);
     glUseProgram(prg);
+
+    glProgramUniform1f(prg,iTimeLoc,iTime);
 
     glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(VertexIndex),GL_UNSIGNED_INT,0);
 
